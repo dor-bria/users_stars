@@ -1,4 +1,4 @@
-from flask import Flask, redirect, request
+from flask import Flask, redirect, request, jsonify
 import requests
 import datetime
 import os
@@ -9,14 +9,13 @@ app = Flask(__name__)
 # OAuth settings
 CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID")
 CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET")
-REDIRECT_URI = "https://users-git-stars.onrender.com/callback"   # update with your Render domain
+REDIRECT_URI = "https://users-git-stars.onrender.com/callback"   # חייב להיות תואם ב־GitHub OAuth App
 REPO_URL = "https://github.com/Bria-AI/RMBG-2.0"
 
 # Database connection
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 def get_connection():
-    # psycopg3 uses "connect" just like psycopg2, but returns context managers
     return psycopg.connect(DATABASE_URL)
 
 # Create table if it does not exist
@@ -63,32 +62,62 @@ def callback():
     code = request.args.get("code")
     source = request.args.get("state")
 
-    # Exchange code for access_token
-    token_res = requests.post(
-        "https://github.com/login/oauth/access_token",
-        headers={"Accept": "application/json"},
-        json={
-            "client_id": CLIENT_ID,
-            "client_secret": CLIENT_SECRET,
-            "code": code,
-            "redirect_uri": REDIRECT_URI,
-        },
-    )
-    token_data = token_res.json()
-    access_token = token_data.get("access_token")
+    if not code:
+        return "Error: Missing code from GitHub", 400
 
-    # Get user details from GitHub
-    user_res = requests.get(
-        "https://api.github.com/user",
-        headers={"Authorization": f"token {access_token}"},
-    )
-    user_data = user_res.json()
+    try:
+        # Exchange code for access_token
+        token_res = requests.post(
+            "https://github.com/login/oauth/access_token",
+            headers={"Accept": "application/json"},
+            json={
+                "client_id": CLIENT_ID,
+                "client_secret": CLIENT_SECRET,
+                "code": code,
+                "redirect_uri": REDIRECT_URI,
+            },
+            timeout=10,
+        )
 
-    # Save log to DB
-    save_log(user_data.get("login"), source)
+        print("TOKEN RESPONSE:", token_res.text)  # Debug log
 
-    # Redirect back to the repo
-    return redirect(REPO_URL)
+        if token_res.status_code != 200:
+            return f"Error fetching token: {token_res.text}", 500
+
+        token_data = token_res.json()
+        access_token = token_data.get("access_token")
+
+        if not access_token:
+            return f"Error: No access token returned. Response: {token_res.text}", 500
+
+        # Get user details from GitHub
+        user_res = requests.get(
+            "https://api.github.com/user",
+            headers={"Authorization": f"token {access_token}"},
+            timeout=10,
+        )
+
+        print("USER RESPONSE:", user_res.text)  # Debug log
+
+        if user_res.status_code != 200:
+            return f"Error fetching user info: {user_res.text}", 500
+
+        user_data = user_res.json()
+        username = user_data.get("login")
+
+        if not username:
+            return f"Error: No username found in GitHub response: {user_res.text}", 500
+
+        # Save log to DB
+        save_log(username, source or "unknown")
+
+        # Redirect back to the repo
+        return redirect(REPO_URL)
+
+    except Exception as e:
+        print("CALLBACK ERROR:", str(e))
+        return f"Internal error: {str(e)}", 500
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
