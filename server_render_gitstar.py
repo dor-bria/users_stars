@@ -2,7 +2,7 @@ from flask import Flask, redirect, request
 import requests
 import datetime
 import os
-from sqlalchemy import create_engine, text
+import psycopg2
 
 app = Flask(__name__)
 
@@ -14,26 +14,32 @@ REPO_URL = "https://github.com/Bria-AI/RMBG-2.0"
 
 # Database connection
 DATABASE_URL = os.environ.get("DATABASE_URL")
-engine = create_engine(DATABASE_URL)
+
+def get_connection():
+    return psycopg2.connect(DATABASE_URL)
 
 # Create table if it does not exist
-with engine.begin() as conn:
-    conn.execute(text("""
-        CREATE TABLE IF NOT EXISTS logs (
-            id SERIAL PRIMARY KEY,
-            username TEXT,
-            source TEXT,
-            timestamp TIMESTAMP
-        );
-    """))
+with get_connection() as conn:
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS logs (
+                id SERIAL PRIMARY KEY,
+                username TEXT,
+                source TEXT,
+                timestamp TIMESTAMP
+            );
+        """)
+    conn.commit()
 
 def save_log(username, source):
-    timestamp = datetime.datetime.utcnow().isoformat()
-    with engine.begin() as conn:
-        conn.execute(
-            text("INSERT INTO logs (username, source, timestamp) VALUES (:u, :s, :t)"),
-            {"u": username, "s": source, "t": timestamp}
-        )
+    timestamp = datetime.datetime.utcnow()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO logs (username, source, timestamp) VALUES (%s, %s, %s)",
+                (username, source, timestamp)
+            )
+        conn.commit()
 
 # Step 1: Page with "Continue with GitHub" button
 @app.route("/")
