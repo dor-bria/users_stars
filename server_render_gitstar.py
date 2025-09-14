@@ -1,113 +1,88 @@
-{
- "cells": [
-  {
-   "cell_type": "code",
-   "execution_count": null,
-   "id": "cc6c6c87-28d8-434a-99fc-f03133516c4d",
-   "metadata": {},
-   "outputs": [],
-   "source": [
-    "from flask import Flask, redirect, request\n",
-    "import requests\n",
-    "import datetime\n",
-    "import os\n",
-    "from sqlalchemy import create_engine, text\n",
-    "\n",
-    "app = Flask(__name__)\n",
-    "\n",
-    "# הגדרות OAuth\n",
-    "CLIENT_ID = os.environ.get(\"GITHUB_CLIENT_ID\")\n",
-    "CLIENT_SECRET = os.environ.get(\"GITHUB_CLIENT_SECRET\")\n",
-    "REDIRECT_URI = \"https://your-app.onrender.com/callback\"   # עדכן לדומיין שלך\n",
-    "REPO_URL = \"https://github.com/Bria-AI/RMBG-2.0\"\n",
-    "\n",
-    "# חיבור ל-DB\n",
-    "DATABASE_URL = os.environ.get(\"DATABASE_URL\")\n",
-    "engine = create_engine(DATABASE_URL)\n",
-    "\n",
-    "def save_log(username, source):\n",
-    "    timestamp = datetime.datetime.utcnow().isoformat()\n",
-    "    with engine.begin() as conn:\n",
-    "        conn.execute(\n",
-    "            text(\"INSERT INTO logs (username, source, timestamp) VALUES (:u, :s, :t)\"),\n",
-    "            {\"u\": username, \"s\": source, \"t\": timestamp}\n",
-    "        )\n",
-    "\n",
-    "# שלב 1: דף עם כפתור \"Continue with GitHub\"\n",
-    "@app.route(\"/\")\n",
-    "def home():\n",
-    "    source = request.args.get(\"src\", \"unknown\")\n",
-    "    github_auth_url = (\n",
-    "        f\"https://github.com/login/oauth/authorize\"\n",
-    "        f\"?client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&state={source}\"\n",
-    "    )\n",
-    "    return f\"\"\"\n",
-    "    <h2>Confirm your GitHub account</h2>\n",
-    "    <a href=\"{github_auth_url}\">\n",
-    "        <button>Continue with GitHub</button>\n",
-    "    </a>\n",
-    "    \"\"\"\n",
-    "\n",
-    "# שלב 2: callback אחרי אישור\n",
-    "@app.route(\"/callback\")\n",
-    "def callback():\n",
-    "    code = request.args.get(\"code\")\n",
-    "    source = request.args.get(\"state\")\n",
-    "\n",
-    "    # החלפת code ב-access_token\n",
-    "    token_res = requests.post(\n",
-    "        \"https://github.com/login/oauth/access_token\",\n",
-    "        headers={\"Accept\": \"application/json\"},\n",
-    "        json={\n",
-    "            \"client_id\": CLIENT_ID,\n",
-    "            \"client_secret\": CLIENT_SECRET,\n",
-    "            \"code\": code,\n",
-    "            \"redirect_uri\": REDIRECT_URI,\n",
-    "        },\n",
-    "    )\n",
-    "    token_data = token_res.json()\n",
-    "    access_token = token_data.get(\"access_token\")\n",
-    "\n",
-    "    # שליפת פרטי המשתמש\n",
-    "    user_res = requests.get(\n",
-    "        \"https://api.github.com/user\",\n",
-    "        headers={\"Authorization\": f\"token {access_token}\"},\n",
-    "    )\n",
-    "    user_data = user_res.json()\n",
-    "\n",
-    "    # שמירת לוג ב-DB\n",
-    "    save_log(user_data.get(\"login\"), source)\n",
-    "\n",
-    "    print(f\"✅ New log saved: {user_data.get('login')} from {source}\")\n",
-    "\n",
-    "    # הפניה חזרה ל-Repo\n",
-    "    return redirect(REPO_URL)\n",
-    "\n",
-    "if __name__ == \"__main__\":\n",
-    "    port = int(os.environ.get(\"PORT\", 5000))\n",
-    "    app.run(host=\"0.0.0.0\", port=port, debug=False)"
-   ]
-  }
- ],
- "metadata": {
-  "kernelspec": {
-   "display_name": "Python 3 (ipykernel)",
-   "language": "python",
-   "name": "python3"
-  },
-  "language_info": {
-   "codemirror_mode": {
-    "name": "ipython",
-    "version": 3
-   },
-   "file_extension": ".py",
-   "mimetype": "text/x-python",
-   "name": "python",
-   "nbconvert_exporter": "python",
-   "pygments_lexer": "ipython3",
-   "version": "3.13.5"
-  }
- },
- "nbformat": 4,
- "nbformat_minor": 5
-}
+from flask import Flask, redirect, request
+import requests
+import datetime
+import os
+from sqlalchemy import create_engine, text
+
+app = Flask(__name__)
+
+# OAuth settings
+CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID")
+CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET")
+REDIRECT_URI = "https://your-app.onrender.com/callback"   # update with your Render domain
+REPO_URL = "https://github.com/Bria-AI/RMBG-2.0"
+
+# Database connection
+DATABASE_URL = os.environ.get("DATABASE_URL")
+engine = create_engine(DATABASE_URL)
+
+# Create table if it does not exist
+with engine.begin() as conn:
+    conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS logs (
+            id SERIAL PRIMARY KEY,
+            username TEXT,
+            source TEXT,
+            timestamp TIMESTAMP
+        );
+    """))
+
+def save_log(username, source):
+    timestamp = datetime.datetime.utcnow().isoformat()
+    with engine.begin() as conn:
+        conn.execute(
+            text("INSERT INTO logs (username, source, timestamp) VALUES (:u, :s, :t)"),
+            {"u": username, "s": source, "t": timestamp}
+        )
+
+# Step 1: Page with "Continue with GitHub" button
+@app.route("/")
+def home():
+    source = request.args.get("src", "unknown")
+    github_auth_url = (
+        f"https://github.com/login/oauth/authorize"
+        f"?client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&state={source}"
+    )
+    return f"""
+    <h2>Confirm your GitHub account</h2>
+    <a href="{github_auth_url}">
+        <button>Continue with GitHub</button>
+    </a>
+    """
+
+# Step 2: Callback after GitHub authorization
+@app.route("/callback")
+def callback():
+    code = request.args.get("code")
+    source = request.args.get("state")
+
+    # Exchange code for access_token
+    token_res = requests.post(
+        "https://github.com/login/oauth/access_token",
+        headers={"Accept": "application/json"},
+        json={
+            "client_id": CLIENT_ID,
+            "client_secret": CLIENT_SECRET,
+            "code": code,
+            "redirect_uri": REDIRECT_URI,
+        },
+    )
+    token_data = token_res.json()
+    access_token = token_data.get("access_token")
+
+    # Get user details from GitHub
+    user_res = requests.get(
+        "https://api.github.com/user",
+        headers={"Authorization": f"token {access_token}"},
+    )
+    user_data = user_res.json()
+
+    # Save log to DB
+    save_log(user_data.get("login"), source)
+
+    # Redirect back to the repo
+    return redirect(REPO_URL)
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
