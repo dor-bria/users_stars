@@ -2,7 +2,7 @@ from flask import Flask, redirect, request
 import requests
 import datetime
 import os
-import psycopg2
+import psycopg
 
 app = Flask(__name__)
 
@@ -16,7 +16,8 @@ REPO_URL = "https://github.com/Bria-AI/RMBG-2.0"
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 def get_connection():
-    return psycopg2.connect(DATABASE_URL)
+    # psycopg3 uses "connect" just like psycopg2, but returns context managers
+    return psycopg.connect(DATABASE_URL)
 
 # Create table if it does not exist
 with get_connection() as conn:
