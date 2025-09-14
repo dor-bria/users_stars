@@ -9,7 +9,7 @@ app = Flask(__name__)
 # OAuth settings
 CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID")
 CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET")
-REDIRECT_URI = "https://your-app.onrender.com/callback"   # update with your Render domain
+REDIRECT_URI = "https://users-git-stars.onrender.com/callback"   # update with your Render domain
 REPO_URL = "https://github.com/Bria-AI/RMBG-2.0"
 
 # Database connection
