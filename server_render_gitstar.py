@@ -50,10 +50,52 @@ def home():
         f"?client_id={CLIENT_ID}&redirect_uri={REDIRECT_URI}&state={source}"
     )
     return f"""
-    <h2>Confirm your GitHub account</h2>
-    <a href="{github_auth_url}">
-        <button>Continue with GitHub</button>
-    </a>
+    <html>
+      <head>
+        <style>
+          body {{
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f9f9f9;
+          }}
+          .container {{
+            text-align: center;
+            padding: 40px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0px 4px 15px rgba(0, 0, 0, 0.1);
+          }}
+          h2 {{
+            margin-bottom: 20px;
+            color: #333;
+          }}
+          button {{
+            padding: 12px 24px;
+            font-size: 16px;
+            background-color: #24292e;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+          }}
+          button:hover {{
+            background-color: #444c56;
+          }}
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h2>Confirm your GitHub account</h2>
+          <a href="{github_auth_url}">
+              <button>Continue with GitHub</button>
+          </a>
+        </div>
+      </body>
+    </html>
     """
 
 # Step 2: Callback after GitHub authorization
